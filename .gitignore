@@ -55,3 +55,5 @@ windows/
 
 test/widget_test.dart
 pubspec.lock
+assets/credentials.json
+assets/assets/credentials.json
