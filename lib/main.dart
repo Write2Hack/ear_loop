@@ -204,61 +204,82 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
     );
   }
 
-  Widget _buildAnswerButton(String label) {
+  Widget _buildAnswerButton(String label, IconData icon) {
     bool isSelected = selectedAnswer == label;
+    bool isCorrect = (selectedAnswer == "Up" && firstNote != secondNote && notes.indexOf(firstNote) < notes.indexOf(secondNote)) ||
+                     (selectedAnswer == "Down" && firstNote != secondNote && notes.indexOf(firstNote) > notes.indexOf(secondNote)) ||
+                     (selectedAnswer == "Same" && firstNote == secondNote);
+
     Color buttonColor = Colors.grey;
     if (isSelected) {
-      buttonColor = (label == selectedAnswer && showFeedback)
-          ? (selectedAnswer == "Up" && notes.indexOf(firstNote) < notes.indexOf(secondNote) ||
-                  selectedAnswer == "Down" && notes.indexOf(firstNote) > notes.indexOf(secondNote) ||
-                  selectedAnswer == "Same" && firstNote == secondNote)
-              ? Colors.green
-              : Colors.red
-          : Colors.grey;
+      buttonColor = isCorrect ? Colors.green : Colors.red;
     }
 
-    return ElevatedButton(
-      onPressed: selectedAnswer == null ? () => _checkAnswer(label) : null,
-      style: ElevatedButton.styleFrom(backgroundColor: buttonColor),
-      child: Text(label),
+    return GestureDetector(
+      onTap: selectedAnswer == null ? () => _checkAnswer(label) : null,
+      child: Container(
+        width: 70,
+        height: 70,
+        decoration: BoxDecoration(
+          color: buttonColor,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 40, color: Colors.white),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    double progress = (currentQuestion + 1) / widget.totalQuestions;
+
     return Scaffold(
       appBar: AppBar(title: Text("Ear Training")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      body: Column(
+        children: [
+          LinearProgressIndicator(value: progress, minHeight: 8),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: _playNotes,
+                        child: Text("▶︎", style: TextStyle(fontSize: 28)),
+                      ),
+                    ],
+                  ),
+                  if (showFeedback) _buildPianoKeyboard(),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 30),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                TextButton(
-                  onPressed: _playNotes,
-                  child: Text("▶︎", style: TextStyle(fontSize: 28)),
-                ),
+                _buildAnswerButton("Down", Icons.arrow_downward),
+                _buildAnswerButton("Same", Icons.horizontal_rule),
+                _buildAnswerButton("Up", Icons.arrow_upward),
               ],
             ),
-            SizedBox(height: 20),
-            _buildAnswerButton("Up"),
-            _buildAnswerButton("Same"),
-            _buildAnswerButton("Down"),
-            SizedBox(height: 20),
-            if (showFeedback) _buildPianoKeyboard(),
-            if (showFeedback)
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    currentQuestion++;
-                  });
-                  _generateNewQuestion();
-                },
-                child: Text("Next"),
-              ),
-          ],
-        ),
+          ),
+          if (showFeedback)
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  currentQuestion++;
+                });
+                _generateNewQuestion();
+              },
+              child: Text("Next"),
+            ),
+          SizedBox(height: 20),
+        ],
       ),
     );
   }
