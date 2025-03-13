@@ -23,13 +23,15 @@ class QuestionSetupScreen extends StatefulWidget {
 }
 
 class _QuestionSetupScreenState extends State<QuestionSetupScreen> {
-  int questionCount = 10;
-  final TextEditingController _controller = TextEditingController();
+  int selectedQuestions = 10;
+  final List<int> options = [10, 30, 50, 100];
 
-  void _startExercise() {
+  void startExercise() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => EarTrainingScreen(totalQuestions: questionCount)),
+      MaterialPageRoute(
+        builder: (context) => EarTrainingScreen(totalQuestions: selectedQuestions),
+      ),
     );
   }
 
@@ -37,44 +39,42 @@ class _QuestionSetupScreenState extends State<QuestionSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Set Up Exercise")),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
+      body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("How many questions do you want?", style: TextStyle(fontSize: 20)),
-            SizedBox(height: 10),
-            TextField(
-              controller: _controller,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: "Enter a number",
-              ),
-              onChanged: (value) {
-                if (value.isNotEmpty) {
-                  questionCount = int.tryParse(value) ?? 10;
-                }
-              },
-            ),
-            SizedBox(height: 10),
+            Text("How many questions?", style: TextStyle(fontSize: 22)),
+            SizedBox(height: 20),
             Wrap(
               spacing: 10,
-              children: [10, 30, 50, 100].map((num) {
+              children: options.map((q) {
                 return ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      questionCount = num;
+                      selectedQuestions = q;
                     });
-                    _startExercise();
+                    startExercise();
                   },
-                  child: Text("$num Questions"),
+                  child: Text("$q"),
                 );
               }).toList(),
             ),
             SizedBox(height: 20),
+            Text("Or enter a number:"),
+            SizedBox(height: 10),
+            SizedBox(
+              width: 80,
+              child: TextField(
+                keyboardType: TextInputType.number,
+                onChanged: (val) {
+                  selectedQuestions = int.tryParse(val) ?? 10;
+                },
+                decoration: InputDecoration(border: OutlineInputBorder()),
+              ),
+            ),
+            SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _startExercise,
+              onPressed: startExercise,
               child: Text("Start"),
             ),
           ],
@@ -97,11 +97,11 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final List<String> notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
   int score = 0;
-  int questionNumber = 0;
+  int currentQuestion = 0;
   String firstNote = '';
   String secondNote = '';
+  String? selectedAnswer;
   bool showFeedback = false;
-  bool isCorrect = false;
 
   @override
   void initState() {
@@ -110,7 +110,7 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
   }
 
   void _generateNewQuestion() {
-    if (questionNumber >= widget.totalQuestions) {
+    if (currentQuestion >= widget.totalQuestions) {
       _showFinalScore();
       return;
     }
@@ -122,10 +122,11 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
 
       firstNote = notes[firstIndex];
       secondNote = notes[secondIndex];
+      selectedAnswer = null;
       showFeedback = false;
     });
 
-    Future.delayed(Duration(milliseconds: 500), _playNotes);
+    _playNotes();
   }
 
   Future<void> _playNotes() async {
@@ -134,23 +135,17 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
     await _audioPlayer.play(AssetSource('sounds/$secondNote.wav'));
   }
 
-  void _playSingleNote(String note) async {
-    await _audioPlayer.play(AssetSource('sounds/$note.wav'));
-  }
-
   void _checkAnswer(String answer) {
-    bool correctAnswer = (firstNote == secondNote && answer == 'Same') ||
+    bool correctAnswer =
         (notes.indexOf(firstNote) < notes.indexOf(secondNote) && answer == 'Up') ||
-        (notes.indexOf(firstNote) > notes.indexOf(secondNote) && answer == 'Down');
+        (notes.indexOf(firstNote) > notes.indexOf(secondNote) && answer == 'Down') ||
+        (firstNote == secondNote && answer == 'Same');
 
     setState(() {
-      questionNumber++;
       if (correctAnswer) {
         score++;
-        isCorrect = true;
-      } else {
-        isCorrect = false;
       }
+      selectedAnswer = answer;
       showFeedback = true;
     });
   }
@@ -164,76 +159,103 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.popUntil(context, (route) => route.isFirst);
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
-            child: Text("Back to Start"),
+            child: Text("OK"),
           )
         ],
       ),
     );
   }
 
-  void _nextQuestion() {
-    _generateNewQuestion();
+  Widget _buildPianoKeyboard() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: notes.map((note) {
+        bool isFirst = note == firstNote;
+        bool isSecond = note == secondNote;
+
+        return Column(
+          children: [
+            Text(note, style: TextStyle(fontSize: 16)),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () => _audioPlayer.play(AssetSource('sounds/$note.wav')),
+                  child: Container(
+                    width: 40,
+                    height: 100,
+                    margin: EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black),
+                    ),
+                  ),
+                ),
+                if (isFirst) Text("1", style: TextStyle(fontSize: 24, color: Colors.red)),
+                if (isSecond) Text("2", style: TextStyle(fontSize: 24, color: Colors.blue)),
+              ],
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAnswerButton(String label) {
+    bool isSelected = selectedAnswer == label;
+    Color buttonColor = Colors.grey;
+    if (isSelected) {
+      buttonColor = (label == selectedAnswer && showFeedback)
+          ? (selectedAnswer == "Up" && notes.indexOf(firstNote) < notes.indexOf(secondNote) ||
+                  selectedAnswer == "Down" && notes.indexOf(firstNote) > notes.indexOf(secondNote) ||
+                  selectedAnswer == "Same" && firstNote == secondNote)
+              ? Colors.green
+              : Colors.red
+          : Colors.grey;
+    }
+
+    return ElevatedButton(
+      onPressed: selectedAnswer == null ? () => _checkAnswer(label) : null,
+      style: ElevatedButton.styleFrom(backgroundColor: buttonColor),
+      child: Text(label),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Ear Training')),
+      appBar: AppBar(title: Text("Ear Training")),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("Did the pitch go up, down, or stay the same?", style: TextStyle(fontSize: 22)),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => _checkAnswer('Up'),
-              child: Text("Up"),
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () => _checkAnswer('Down'),
-              child: Text("Down"),
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () => _checkAnswer('Same'),
-              child: Text("Same"),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: _playNotes,
+                  child: Text("▶︎", style: TextStyle(fontSize: 28)),
+                ),
+              ],
             ),
             SizedBox(height: 20),
+            _buildAnswerButton("Up"),
+            _buildAnswerButton("Same"),
+            _buildAnswerButton("Down"),
+            SizedBox(height: 20),
+            if (showFeedback) _buildPianoKeyboard(),
             if (showFeedback)
-              Column(
-                children: [
-                  Text(
-                    isCorrect ? "Correct!" : "Wrong!",
-                    style: TextStyle(fontSize: 24, color: isCorrect ? Colors.green : Colors.red),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    "Notes played:",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () => _playSingleNote(firstNote),
-                        child: Text(firstNote),
-                      ),
-                      SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: () => _playSingleNote(secondNote),
-                        child: Text(secondNote),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _nextQuestion,
-                    child: Text("Next"),
-                  ),
-                ],
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    currentQuestion++;
+                  });
+                  _generateNewQuestion();
+                },
+                child: Text("Next"),
               ),
           ],
         ),
