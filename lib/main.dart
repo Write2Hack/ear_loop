@@ -188,9 +188,9 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
 
   void _showFinalScore() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> performance = prefs.getStringList('performance') ?? [];
+    List<String> performance = prefs.getStringList('acc') ?? [];
     performance.add((score / widget.totalQuestions * 100).toString());
-    await prefs.setStringList('performance', performance);
+    await prefs.setStringList('acc', performance);
 
     showDialog(
       context: context,
@@ -329,7 +329,7 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
 class PerformanceScreen extends StatelessWidget {
   Future<List<FlSpot>> _getPerformanceData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> performance = prefs.getStringList('performance') ?? [];
+    List<String> performance = prefs.getStringList('acc') ?? [];
     return performance.asMap().entries.map((entry) {
       int index = entry.key;
       double value = double.parse(entry.value);
@@ -362,8 +362,32 @@ class PerformanceScreen extends StatelessWidget {
                   ),
                 ],
                 titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
-                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 10,
+                      reservedSize: 40,
+                      getTitlesWidget: (value, meta) {
+                        return Text('${value.toInt()}%');
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 1,
+                      reservedSize: 40,
+                      getTitlesWidget: (value, meta) {
+                        return Text('${value.toInt()}');
+                      },
+                    ),
+                  ),
+                  topTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                 ),
                 borderData: FlBorderData(show: true),
                 gridData: FlGridData(show: true),
