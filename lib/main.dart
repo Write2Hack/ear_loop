@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 void main() {
   runApp(EarTrainingApp());
@@ -12,7 +14,41 @@ class EarTrainingApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ear Training',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: QuestionSetupScreen(),
+      home: HomeScreen(),
+    );
+  }
+}
+
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Ear Training")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => QuestionSetupScreen()),
+                );
+              },
+              child: Text("Start Exercise"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => PerformanceScreen()),
+                );
+              },
+              child: Text("View Performance"),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -150,7 +186,12 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
     });
   }
 
-  void _showFinalScore() {
+  void _showFinalScore() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> performance = prefs.getStringList('performance') ?? [];
+    performance.add((score / widget.totalQuestions * 100).toString());
+    await prefs.setStringList('performance', performance);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -280,6 +321,56 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
             ),
           SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+}
+
+class PerformanceScreen extends StatelessWidget {
+  Future<List<FlSpot>> _getPerformanceData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> performance = prefs.getStringList('performance') ?? [];
+    return performance.asMap().entries.map((entry) {
+      int index = entry.key;
+      double value = double.parse(entry.value);
+      return FlSpot(index.toDouble(), value);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Performance")),
+      body: FutureBuilder<List<FlSpot>>(
+        future: _getPerformanceData(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: LineChart(
+              LineChartData(
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: snapshot.data!,
+                    isCurved: true,
+                    barWidth: 4,
+                    color: Colors.blue,
+                    belowBarData: BarAreaData(show: false),
+                  ),
+                ],
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
+                ),
+                borderData: FlBorderData(show: true),
+                gridData: FlGridData(show: true),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
