@@ -138,6 +138,10 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
   String secondNote = '';
   String? selectedAnswer;
   bool showFeedback = false;
+  DateTime? questionStartTime;
+  List<int> questionTimes = [];
+  Map<String, List<int>> combinationTimes = {};
+  Map<String, List<bool>> combinationAccuracy = {};
 
   @override
   void initState() {
@@ -160,6 +164,7 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
       secondNote = notes[secondIndex];
       selectedAnswer = null;
       showFeedback = false;
+      questionStartTime = DateTime.now();
     });
 
     _playNotes();
@@ -183,14 +188,40 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
       }
       selectedAnswer = answer;
       showFeedback = true;
+
+      // Track time taken for the question
+      if (questionStartTime != null) {
+        int timeTaken = DateTime.now().difference(questionStartTime!).inSeconds;
+        questionTimes.add(timeTaken);
+
+        // Track combination accuracy and time
+        String combination = '$firstNote$secondNote';
+        combinationTimes.putIfAbsent(combination, () => []).add(timeTaken);
+        combinationAccuracy.putIfAbsent(combination, () => []).add(correctAnswer);
+      }
     });
   }
 
   void _showFinalScore() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> performance = prefs.getStringList('acc') ?? [];
+    List<String> performance = prefs.getStringList('accuracy') ?? [];
     performance.add((score / widget.totalQuestions * 100).toString());
-    await prefs.setStringList('acc', performance);
+    await prefs.setStringList('accuracy', performance);
+
+    // Save average time per question
+    double avgTime = questionTimes.isNotEmpty ? questionTimes.reduce((a, b) => a + b) / questionTimes.length : 0;
+    List<String> avgTimes = prefs.getStringList('avg_time') ?? [];
+    avgTimes.add(avgTime.toString());
+    await prefs.setStringList('avg_time', avgTimes);
+
+    // Save combination accuracy and time
+    List<String> combinationData = [];
+    combinationAccuracy.forEach((combination, accuracies) {
+      double accuracy = accuracies.where((a) => a).length / accuracies.length * 100;
+      double avgTime = combinationTimes[combination]!.reduce((a, b) => a + b) / combinationTimes[combination]!.length;
+      combinationData.add('$combination,$accuracy,$avgTime');
+    });
+    await prefs.setStringList('combination_data', combinationData);
 
     showDialog(
       context: context,
@@ -329,11 +360,34 @@ class _EarTrainingScreenState extends State<EarTrainingScreen> {
 class PerformanceScreen extends StatelessWidget {
   Future<List<FlSpot>> _getPerformanceData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> performance = prefs.getStringList('acc') ?? [];
+    List<String> performance = prefs.getStringList('accuracy') ?? [];
     return performance.asMap().entries.map((entry) {
       int index = entry.key;
       double value = double.parse(entry.value);
       return FlSpot(index.toDouble(), value);
+    }).toList();
+  }
+
+  Future<List<FlSpot>> _getAvgTimeData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> avgTimes = prefs.getStringList('avg_time') ?? [];
+    return avgTimes.asMap().entries.map((entry) {
+      int index = entry.key;
+      double value = double.parse(entry.value);
+      return FlSpot(index.toDouble(), value);
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _getCombinationData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> combinationData = prefs.getStringList('combination_data') ?? [];
+    return combinationData.map((data) {
+      var parts = data.split(',');
+      return {
+        'combination': parts[0],
+        'accuracy': double.parse(parts[1]),
+        'avgTime': double.parse(parts[2]),
+      };
     }).toList();
   }
 
@@ -350,48 +404,129 @@ class PerformanceScreen extends StatelessWidget {
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
-            child: LineChart(
-              LineChartData(
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: snapshot.data!,
-                    isCurved: true,
-                    barWidth: 4,
-                    color: Colors.blue,
-                    belowBarData: BarAreaData(show: false),
-                  ),
-                ],
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 10,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text('${value.toInt()}%');
-                      },
+            child: Column(
+              children: [
+                Expanded(
+                  child: LineChart(
+                    LineChartData(
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: snapshot.data!,
+                          isCurved: true,
+                          barWidth: 4,
+                          color: Colors.blue,
+                          belowBarData: BarAreaData(show: false),
+                        ),
+                      ],
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: 10,
+                            reservedSize: 40,
+                            getTitlesWidget: (value, meta) {
+                              return Text('${value.toInt()}%');
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: 1,
+                            reservedSize: 40,
+                            getTitlesWidget: (value, meta) {
+                              return Text('${value.toInt()}');
+                            },
+                          ),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: true),
+                      gridData: FlGridData(show: true),
                     ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 1,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text('${value.toInt()}');
-                      },
-                    ),
-                  ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
                   ),
                 ),
-                borderData: FlBorderData(show: true),
-                gridData: FlGridData(show: true),
-              ),
+                SizedBox(height: 20),
+                FutureBuilder<List<FlSpot>>(
+                  future: _getAvgTimeData(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    return Expanded(
+                      child: LineChart(
+                        LineChartData(
+                          lineBarsData: [
+                            LineChartBarData(
+                              spots: snapshot.data!,
+                              isCurved: true,
+                              barWidth: 4,
+                              color: Colors.red,
+                              belowBarData: BarAreaData(show: false),
+                            ),
+                          ],
+                          titlesData: FlTitlesData(
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                interval: 1,
+                                reservedSize: 40,
+                                getTitlesWidget: (value, meta) {
+                                  return Text('${value.toInt()}s');
+                                },
+                              ),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                interval: 1,
+                                reservedSize: 40,
+                                getTitlesWidget: (value, meta) {
+                                  return Text('${value.toInt()}');
+                                },
+                              ),
+                            ),
+                            topTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                          ),
+                          borderData: FlBorderData(show: true),
+                          gridData: FlGridData(show: true),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(height: 20),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _getCombinationData(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    return Expanded(
+                      child: ListView(
+                        children: snapshot.data!.map((data) {
+                          return ListTile(
+                            title: Text('Combination: ${data['combination']}'),
+                            subtitle: Text('Accuracy: ${data['accuracy']}%, Avg Time: ${data['avgTime']}s'),
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           );
         },
